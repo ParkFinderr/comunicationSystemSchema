@@ -3,33 +3,63 @@
 Dokumentasi ini mencakup spesifikasi **RESTful API**, **WebSocket Events**, dan **MQTT Topics** untuk sistem ParkFinder.
 Dokumen ini menjadi acuan utama bagi Tim Frontend (Mobile & Web) dan Tim IoT Engineer.
 
-<!-- **Base URL:** `nanti menyusul` -->
+**Base URL:** `base urlnya nanti menyusul`
 **Auth Header:** `Authorization: Bearer <jwt>`
 
 ---
 
 ## 🔌 1. RESTful API Endpoints
 
-### 🔐 A. Authentication & User
-Mengelola sesi pengguna dan data profil.
+### 🔐 Tabel Modul Autentikasi
+Menangani proses registrasi, login, dan logout sesi pengguna.
 
-| Method | Endpoint | Access | Description |
+| Method | Endpoint | Hak Akses | Deskripsi |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/auth/register` | Public | Mendaftarkan user baru & menyimpan data awal di Firestore. |
-| `POST` | `/auth/login` | Public | Verifikasi token Firebase, cek role, & **simpan FCM Token** (untuk notif). |
-| `POST` | `/auth/logout` | User | Hapus sesi & **hapus FCM Token** agar notifikasi berhenti. |
-| `GET` | `/users/profile` | User | Mengambil data profil & list kendaraan user. |
-| `POST` | `/users/vehicles`| User | Menambah plat nomor kendaraan baru. |
+| `POST` | `/auth/register` | Public | Registrasi pengguna baru dan menerima ID Token dari Firebase setelah user sign up di App. |
+| `POST` | `/auth/login` | Public | Login sinkronisasi pengguna dan menyimpan **FCM Token** (untuk notifikasi). |
+| `POST` | `/auth/logout` | Public | Logout pengguna dan menghapus FCM Token dari database. |
 
-### 🅿️ B. Parking Areas (Public Info)
-Digunakan untuk menampilkan data di "Halaman Utama" aplikasi/web.
+<br>
 
-| Method | Endpoint | Access | Description |
+### 👤 Tabel Modul Manajemen Pengguna & Kendaraan
+Mengelola data profil, kendaraan, dan monitoring pengguna (Admin).
+
+| Method | Endpoint | Hak Akses | Deskripsi |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/areas` | Public | List semua gedung & sisa slot kosong (*Available Counter*). |
-| `GET` | `/areas/:id/slots`| Public | **[Snapshot]** Mengambil status warna-warni slot (Merah/Hijau) saat aplikasi *pertama dibuka*. Update selanjutnya via WebSocket. |
+| `GET` | `/users/profile` | Pengguna | Mengambil detail data pengguna yang sedang login. |
+| `PUT` | `/users/profile` | Pengguna | Mengubah data profil pengguna (Nama/No HP). |
+| `POST` | `/users/vehicles`| Pengguna | Menambahkan data kendaraan baru ke dalam akun. |
+| `DELETE`| `/users/vehicles/:id`| Pengguna | Menghapus kendaraan yang sudah tidak digunakan. |
+| `GET` | `/admin/users` | **Admin** | Melihat seluruh pengguna terdaftar untuk keperluan monitoring. |
+| `DELETE`| `/admin/users/:id` | **Admin** | Menghapus pengguna (Ban User). |
 
-### 🎟️ C. Reservations (Core Logic)
+<br>
+
+### 🅿️ Tabel Modul Manajemen Lahan Parkir
+Menampilkan informasi gedung, slot, dan manajemen teknis slot (Admin).
+
+| Method | Endpoint | Hak Akses | Deskripsi |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/areas` | Public | Menampilkan daftar gedung dan sisa kuota parkir. |
+| `GET` | `/areas/:id/slots`| Public | **[Snapshot]** Mengambil data status slot saat aplikasi pertama kali dibuka (untuk inisialisasi denah). Perubahan selanjutnya via WebSocket. |
+| `POST` | `/areas/slots` | **Admin** | Menambahkan slot baru pada area tertentu. |
+| `PUT` | `/areas/slots/:id`| **Admin** | Mengubah nama slot atau memperbaiki data lantai. |
+| `PATCH`| `/areas/slots/:id/status`| **Admin** | Mengubah status slot menjadi `'maintenance'` (Rusak/Perbaikan). |
+
+<br>
+
+### 🎟️ Tabel Modul Reservasi & Transaksi
+Menangani logika inti booking, tombol konfirmasi, dan integrasi IoT Trigger.
+
+| Method | Endpoint | Hak Akses | Deskripsi & IoT Trigger |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/reservations` | Public | Membuat tiket reservasi baru dan mengubah status slot jadi `'booked'`. |
+| `GET` | `/reservations/:id` | Public | Melihat detail tiket aktif. |
+| `PATCH`| `/reservations/:id/arrive` | Pengguna | **Tombol "Sudah Sampai"**. Mengubah status jadi `'occupied'` dan mengirim perintah **`buzzerOff`** ke IoT. |
+| `PATCH`| `/reservations/:id/complete`| Pengguna | **Tombol "Keluar"**. Mengubah status jadi `'available'` dan mengirim perintah **`reset`** ke IoT. |
+| `GET` | `/reservations/history` | Pengguna | Menampilkan daftar parkir yang sudah selesai. |
+
+---
 Menangani alur booking, check-in, dan check-out.
 
 | Method | Endpoint | Access | Description |
@@ -44,31 +74,31 @@ Menangani alur booking, check-in, dan check-out.
 ## ⚡ 2. WebSocket Events (Real-Time)
 Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
 
-**Connection URL:** `wss://api.parkfinder.id`
+**Connection URL:** `base urlnya nanti menyusul`
 
 ### 📥 Listen (Server ➔ Client)
 
-| Event Name | Payload Example | Description |
-| :--- | :--- | :--- |
-| `slotUpdate` | `{ "areaId": "G1", "slotId": "A01", "status": "occupied" }` | Dikirim saat ada perubahan status slot (oleh Sensor atau Booking). **Frontend wajib update warna denah.** |
-| `bookingTimer`| `{ "timeLeft": 280 }` | Hitung mundur sisa waktu check-in (khusus user yang sedang booking). |
+| Arah | Event Name | Payload Contoh | Deskripsi |
+| :--- | :--- | :--- | :--- |
+| **Server ➔ Client** | `slotUpdate` | `{ "areaId":"G1", "slotId":"A01", "status":"occupied" }` | Memperbarui warna denah saat ada booking atau sensor mendeteksi mobil. |
+| **Server ➔ Client** | `adminStats` | `{ "totalIncome": 50000, "occupancy": "80%" }` | Memperbarui angka statistik di dashboard admin. |
+| **Server ➔ Client** | `bookingTimer`| `{ "timeLeft": 280 }` | Menghitung mundur batas waktu check-in di layar pengguna. |
 
 ---
 
 ## 🤖 3. MQTT Specifications (For IoT Team)
 Protokol komunikasi antara Hardware (ESP32/STM32) dan Server Cloud.
 
-**Broker:** `tcp://mqtt.parkfinder.id:1883` (GCE)
+**Broker:** `base urlnya nanti menyusul` (GCE)
 
 ### 📡 Topics & Payloads
 
-| Direction | Topic Format | Payload | Action / Logic |
+| Arah | Topik | Payload | Logika Backend / Aksi |
 | :--- | :--- | :--- | :--- |
-| **IoT ➔ Server** | `parkfinder/sensor/{area}/{slot}` | `0` | **Slot Kosong.** Server update DB jadi hijau. |
-| **IoT ➔ Server** | `parkfinder/sensor/{area}/{slot}` | `1` | **Ada Mobil.** Server cek reservasi. |
-| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOn` | **ALARM!** Mobil masuk tapi belum booking/check-in (Parkir Liar). |
-| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOff`| **SILENT.** User valid sudah menekan tombol "Sampai" di aplikasi. |
-| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `reset` | **RESET STATE.** User valid menekan tombol "Keluar". Abaikan pembacaan sensor sesaat (saat mobil mundur). |
+| **IoT ➔ Server** | `parkfinder/sensor/{area}/{slot}` | `0` atau `1` | Laporan sensor update status fisik (0=Kosong, 1=Ada). |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOn` | Dikirim server jika sensor = `1` tapi status aplikasi masih `'available'` (Peringatan Parkir Liar). |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOff`| Dikirim server setelah pengguna menekan tombol **"Sudah Sampai"** (Valid). |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `reset` | Server memerintahkan IoT untuk **Reset State** karena pengguna menekan tombol **"Keluar"**. |
 
 > **⚠️ Note for IoT **
 > Pastikan perangkat *subscribe* ke topik `parkfinder/control/...` segera setelah nyala untuk menerima perintah Buzzer/Reset dari server.
