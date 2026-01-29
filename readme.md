@@ -3,8 +3,8 @@
 Dokumentasi ini mencakup spesifikasi **RESTful API**, **WebSocket Events**, dan **MQTT Topics** untuk sistem ParkFinder.
 Dokumen ini menjadi acuan utama bagi Tim Frontend (Mobile & Web) dan Tim IoT Engineer.
 
-**Base URL:** `https://api.parkfinder.id/v1`
-**Auth Header:** `Authorization: Bearer <Firebase_ID_Token>`
+<!-- **Base URL:** `nanti menyusul` -->
+**Auth Header:** `Authorization: Bearer <jwt>`
 
 ---
 
