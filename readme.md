@@ -54,6 +54,7 @@ Menampilkan informasi gedung dan slot.
 | `GET` | `/areas` | Public | Menampilkan daftar gedung dan sisa kuota. |
 | `GET` | `/areas/:id/slots`| Public | **[Snapshot]** Data awal status slot saat aplikasi dibuka. |
 | `POST` | `/areas/slots` | **Admin** | Menambahkan slot baru. |
+| `PUT` | `/areas/slots/:id` | **Admin** | Mengubah detail slot (Nama slot, Lantai, dll). |
 | `PATCH`| `/areas/slots/:id/status`| **Admin** | Mengubah status slot menjadi `'maintenance'` (Rusak). |
 
 <br>
@@ -83,10 +84,10 @@ Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
 
 | Event Name | Target | Payload Contoh | Deskripsi |
 | :--- | :--- | :--- | :--- |
-| `slotUpdate` | Broadcast | `{ "slotId":"A1", "status":"occupied" }` | Update warna denah real-time (Hijau/Kuning/Merah). |
+| `slotUpdate` | Broadcast | `{"areaId":"G1", "slotId":"A01", "status":"reserved"}` | Update warna denah real-time (Hijau/Kuning/Merah). |
 | `bookingTimer`| Unicast | `{ "timeLeftSeconds": 1500 }` | Hitung mundur batas waktu **30 Menit** (On-Site Rule). |
 | `forceRelease`| Unicast | `{ "reason": "timeout" }` | Notifikasi auto-cancel jika waktu habis. |
-| `adminStats` | Admin Web | `{ "occupancy": "85%", "alerts": 1 }` | Update dashboard monitoring admin. |
+| `adminStats` | Admin Web | `{"totalVehicles": 45, "occupancy": "80%", "alerts": 2}` | Update dashboard monitoring admin. |
 
 ---
 
