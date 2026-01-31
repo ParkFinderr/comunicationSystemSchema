@@ -3,8 +3,7 @@
 Dokumentasi ini mencakup spesifikasi **RESTful API**, **WebSocket Events**, dan **MQTT Topics** untuk sistem ParkFinder.
 Dokumen ini menjadi acuan utama bagi Tim Frontend (Mobile & Web) dan Tim IoT Engineer.
 
-> **Status Sistem:** Revisi Final (On-Site Booking Logic)
-> **Base URL:** `https://learn.microsoft.com/id-id/windows-server/administration/windows-server-update-services/get-started/windows-server-update-services-wsus`
+> **Base URL:** `BASE URL MENYUSUL`
 > **Auth Header:** `Authorization: Bearer <jwt_token>`
 
 ---
@@ -94,7 +93,7 @@ Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
 ## 🤖 3. MQTT Specifications (For IoT Team)
 Protokol komunikasi antara Hardware (ESP32) dan Server Cloud.
 
-**Broker:** `[MQTT BROKER URL]`
+**Broker:** `[MQTT BROKER URL MENYUSUL]`
 
 ### 📡 Topics & Payloads
 
