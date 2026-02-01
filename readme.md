@@ -92,100 +92,108 @@ Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
 ---
 
 ## 🤖 3. MQTT Specifications (For IoT Team)
-Protokol komunikasi antara Hardware (ESP32) dan Server Cloud.
-
-**Broker:** `[MQTT BROKER URL MENYUSUL]`
+**Broker:** `[MQTT BROKER URL]`
 
 ### 📡 Topics & Payloads
 
-| Arah | Topik | Payload | Logika Backend / Aksi |
+| Arah | Topik | Payload | Logika Backend / Aksi Hardware |
 | :--- | :--- | :--- | :--- |
-| **IoT ➔ Server** | `parkfinder/sensor/{area}/{slot}` | `0` (Kosong)<br>`1` (Ada) | **Single Source of Truth:** Validasi fisik keberadaan mobil. |
-| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOn` | **Peringatan Anomali:**<br>Dikirim jika:<br>1. Parkir Liar (Sensor=1, App=Available).<br>2. Salah Parkir (Sensor=1, App=Reserved by Other). |
-| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOff`| **Validasi Sukses:**<br>Dikirim saat user valid tekan tombol "Sudah Sampai". |
-| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `reset` | **Reset:**<br>Dikirim saat user "Keluar" untuk reset state hardware. |
+| **IoT ➔ Server** | `parkfinder/sensor/{area}/{slot}` | `0` / `1` | Laporan sensor IR/Ultrasonic. |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `setReserved` | **Aksi Booking:** LED Kuning, LCD "RESERVED". |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `setAvailable`| **Aksi Cancel/Swap/Keluar:** LED Hijau, LCD "AVAILABLE". |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `setAccupied` | **Aksi Check-in:** LED Merah, LCD "OCCUPIED". |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOn` | **Aksi Anomali:** LED Merah Kedip, LCD "ALERT!", Buzzer ON. |
 
 ---
 
 ## 🔄 4. Alur Logika Sistem (System Flows)
 
-Berikut adalah **10 Skenario Lengkap** logika backend dalam menangani kasus di lapangan.
+Berikut adalah **10 Skenario Lengkap** logika backend dalam menangani kasus di lapangan, disesuaikan dengan protokol kontrol Hardware (LED & LCD).
 
 ### 1️⃣ Skenario Masuk & Scan Tiket
-1. User mengambil tiket fisik dari mesin karcis.
-2. User memindai QR Code tiket menggunakan aplikasi (`POST /access/verify`).
-3. **Backend:** Mengikat `ticketId` ke akun user. Tiket status menjadi `'claimed'`.
-4. User mendapat akses ke menu denah parkir.
+1.  User mengambil tiket fisik dari mesin karcis.
+2.  User memindai QR Code tiket menggunakan aplikasi (`POST /access/verify`).
+3.  **Backend:** Mengikat `ticketId` ke akun user. Tiket status menjadi `'claimed'`.
+4.  User mendapat akses ke menu denah parkir.
 
 ### 2️⃣ Skenario Booking Slot (Normal)
-1. User memilih slot kosong (Hijau) di aplikasi.
-2. User tekan "Booking" (`POST /reservations`).
-3. **Backend:** Mengubah status slot menjadi `'reserved'` (Kuning).
-4. **WebSocket:** Update peta ke seluruh user lain agar slot tersebut tidak dipilih orang lain.
+1.  User memilih slot kosong (Hijau) di aplikasi.
+2.  User tekan "Booking" (`POST /reservations`).
+3.  **Backend:**
+    * Mengubah status slot menjadi `'reserved'` (Kuning).
+    * **MQTT:** Mengirim payload `setReserved` ke alat.
+        * *(Hardware: LED Kuning, LCD "RESERVED", Buzzer Mati)*.
+4.  **WebSocket:** Update peta ke seluruh user lain agar slot tersebut tidak dipilih orang lain.
 
 ### 3️⃣ Skenario Konfirmasi Kedatangan (Check-in)
-1. User memarkirkan mobil di slot yang dipesan.
-2. **Sensor IoT:** Mendeteksi objek dan mengirim `1` ke server.
-3. User menekan tombol "Sudah Sampai" di aplikasi (`PATCH /arrive`).
-4. **Backend:** Memvalidasi `sensorStatus == 1`.
-5. Jika valid, status slot berubah menjadi `'occupied'` (Merah).
-6. **MQTT:** Server mengirim `buzzerOff` ke alat untuk mematikan potensi alarm.
+1.  User memarkirkan mobil di slot yang dipesan.
+2.  **Sensor IoT:** Mendeteksi objek dan mengirim `1` ke server.
+3.  User menekan tombol "Sudah Sampai" di aplikasi (`PATCH /arrive`).
+4.  **Backend:** Memvalidasi `sensorStatus == 1`.
+5.  Jika valid:
+    * Status slot berubah menjadi `'occupied'` (Merah).
+    * **MQTT:** Mengirim payload `setOccupied` ke alat.
+        * *(Hardware: LED Merah, LCD "OCCUPIED", Buzzer dipastikan Mati)*.
 
 ### 4️⃣ Skenario Ganti Slot (Swap)
 *User sudah booking Slot A, tapi ingin pindah ke Slot B.*
-1. User memilih Slot B di aplikasi.
-2. Pilih opsi "Pindah ke sini" (`PUT /swap`).
-3. **Backend:**
-   - Melepas Slot A (Kembali Hijau/'Available').
-   - Mengunci Slot B (Menjadi Kuning/'Reserved').
-   - Memperbarui data reservasi tanpa menghapus sesi tiket fisik.
+1.  User memilih Slot B di aplikasi -> Pilih opsi "Pindah ke sini" (`PUT /swap`).
+2.  **Backend:**
+    * **Slot A (Lama):** Status kembali `'available'`.
+        * **MQTT (Slot A):** Mengirim `setAvailable` *(LED Hijau)*.
+    * **Slot B (Baru):** Status menjadi `'reserved'`.
+        * **MQTT (Slot B):** Mengirim `setReserved` *(LED Kuning)*.
+    * Memperbarui data reservasi user.
 
 ### 5️⃣ Skenario Pembatalan Manual
 *User berubah pikiran dan tidak jadi parkir.*
-1. User menekan tombol "Batalkan Pesanan" (`PATCH /cancel`).
-2. **Backend:**
-   - Mengubah status reservasi menjadi `'cancelled'`.
-   - Mengubah status slot kembali menjadi `'available'` (Hijau).
-3. **Catatan:** Tiket fisik **TIDAK HANGUS**. User masih bisa melakukan booking ulang di slot lain selama belum keluar gerbang.
+1.  User menekan tombol "Batalkan Pesanan" (`PATCH /cancel`).
+2.  **Backend:**
+    * Mengubah status reservasi menjadi `'cancelled'`.
+    * Mengubah status slot kembali menjadi `'available'`.
+    * **MQTT:** Mengirim payload `setAvailable` ke alat.
+        * *(Hardware: LED Hijau, LCD "AVAILABLE", Buzzer Mati)*.
 
 ### 6️⃣ Skenario Auto-Cancel (Timeout 30 Menit)
 *User booking tapi tidak kunjung parkir.*
-1. **Backend Timer:** Menghitung waktu sejak booking dibuat.
-2. Jika `(Waktu Sekarang - Waktu Booking) > 30 Menit`:
-3. **Backend Action:**
-   - Otomatis membatalkan reservasi.
-   - Mengirim WebSocket `forceRelease` ke aplikasi user.
-   - Slot kembali menjadi `'available'` (Hijau).
+1.  **Backend Timer:** Menghitung waktu sejak booking dibuat.
+2.  Jika `(Waktu Sekarang - Waktu Booking) > 30 Menit`:
+3.  **Backend Action:**
+    * Otomatis membatalkan reservasi.
+    * **MQTT:** Mengirim payload `setAvailable` ke alat *(Reset Hardware)*.
+    * Mengirim WebSocket `forceRelease` ke aplikasi user.
 
 ### 7️⃣ Skenario Checkout (Keluar)
-1. User menuju pintu keluar.
-2. User menekan tombol "Selesai Parkir" (`PATCH /complete`) atau scan tiket keluar.
-3. **Backend:**
-   - Menutup sesi tiket (`'closed'`).
-   - Melepas `activeTicketId` dari profil user.
-   - Mereset slot menjadi `'available'` dan `sensorStatus` dianggap `0`.
-4. **MQTT:** Mengirim perintah `reset` ke perangkat IoT slot tersebut.
+1.  User menuju pintu keluar -> Tekan "Selesai Parkir" (`PATCH /complete`).
+2.  **Backend:**
+    * Menutup sesi tiket (`'closed'`).
+    * Melepas `activeTicketId` dari profil user.
+    * Mereset slot menjadi `'available'` dan `sensorStatus` dianggap `0`.
+    * **MQTT:** Mengirim payload `setAvailable` ke alat.
+        * *(Hardware: LED Hijau, LCD "AVAILABLE", Buzzer Mati)*.
 
 ### 8️⃣ Skenario Anomali: Salah Parkir
 *User A booking Slot 01, tapi User B (orang lain) parkir di Slot 01.*
-1. **Sensor IoT:** Mendeteksi mobil (`1`) di Slot 01.
-2. **Backend:** Mengecek reservasi aktif Slot 01 adalah milik User A, tapi User A belum konfirmasi "Sudah Sampai".
-3. **Action:**
-   - Menganggap mobil tersebut adalah penyusup.
-   - Mengirim MQTT `buzzerOn` (Alarm berbunyi).
-   - Mengirim notifikasi `alerts` ke Admin Dashboard.
+1.  **Sensor IoT:** Mendeteksi mobil (`1`) di Slot 01.
+2.  **Backend:** Cek reservasi aktif milik User A, tapi User A belum konfirmasi "Sudah Sampai".
+3.  **Action:**
+    * Menganggap mobil tersebut penyusup.
+    * **MQTT:** Mengirim payload `buzzerOn` ke alat.
+        * *(Hardware: LED Merah Kedip, LCD "ALERT!", Buzzer Nyala)*.
+    * Mengirim notifikasi `alerts` ke Admin Dashboard.
 
 ### 9️⃣ Skenario Anomali: Parkir Liar
 *Slot 02 kosong (Available), tiba-tiba ada mobil masuk tanpa booking.*
-1. **Sensor IoT:** Mendeteksi mobil (`1`) di Slot 02.
-2. **Backend:** Mengecek status Slot 02 adalah `'available'` (tidak ada yang booking).
-3. **Action:**
-   - Mengubah tampilan App menjadi `'occupied'` (Merah) dengan label **"UNAUTHORIZED"**.
-   - Mengirim MQTT `buzzerOn`.
+1.  **Sensor IoT:** Mendeteksi mobil (`1`) di Slot 02.
+2.  **Backend:** Cek status Slot 02 adalah `'available'` (tidak ada yang booking).
+3.  **Action:**
+    * Mengubah tampilan App menjadi `'occupied'` (Merah) dengan label **"UNAUTHORIZED"**.
+    * **MQTT:** Mengirim payload `buzzerOn`.
+        * *(Hardware: LED Merah Kedip, LCD "ALERT!", Buzzer Nyala)*.
 
 ### 🔟 Skenario Maintenance (Perbaikan)
 *Slot rusak atau sedang dicat ulang.*
-1. Admin login ke Web Dashboard.
-2. Admin mengubah status slot menjadi "Maintenance" (`PATCH /status`).
-3. **Backend:** Mengupdate `appStatus` menjadi `'maintenance'`.
-4. **Frontend:** Slot tampil berwarna Abu-abu dan tombol booking dinonaktifkan (disable).
+1.  Admin mengubah status slot menjadi "Maintenance" (`PATCH /status`).
+2.  **Backend:** Mengupdate `appStatus` menjadi `'maintenance'`.
+3.  **MQTT (Opsional):** Bisa mengirim `setOccupied` atau `buzzerOn` tergantung kebijakan admin, agar lampu merah dan orang tidak parkir.
+4.  **Frontend:** Slot tampil berwarna Abu-abu dan tombol booking disable.
