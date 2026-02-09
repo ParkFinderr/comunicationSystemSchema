@@ -52,10 +52,12 @@ Menampilkan informasi gedung dan slot.
 | Method | Endpoint | Hak Akses | Deskripsi |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/areas` | Public | Menampilkan daftar gedung dan sisa kuota (Real-time Counter). |
+| `GET` | `/areas/:id` | Public | Menampilkan detail satu gedung (untuk pre-fill form edit). |
 | `POST` | `/areas` | **Admin** | Mendaftarkan gedung/area parkir baru. |
 | `PUT` | `/areas/:id` | **Admin** | Mengubah nama/alamat gedung (Counter Slot tidak boleh diedit manual). |
-| `DELETE`| `/areas/:id` | **Admin** | Menghapus area (Hanya bisa jika area sudah kosong/tanpa slot). |
-| `GET` | `/areas/:id/slots`| Public | **[Snapshot]** Data awal status slot saat aplikasi dibuka. |
+| `DELETE`| `/areas/:id` | **Admin** | Menghapus gedung (Hanya bisa jika gedung sudah kosong/tanpa slot). |
+| `GET` | `/areas/:id/slots`| Public | **[Snapshot]** Data awal status slot di area tertentu saat aplikasi dibuka. |
+| `GET` | `/areas/slots/:id`| Public | Menampilkan detail satu slot (Info fisik & Status). |
 | `POST` | `/areas/slots` | **Admin** | Menambahkan slot baru (Atomic Transaction: Update counter area otomatis). |
 | `PUT` | `/areas/slots/:id` | **Admin** | Mengubah detail slot (Nama, Lantai, Sensor ID) **DAN** Status (Maintenance/Available) sekaligus. |
 | `DELETE`| `/areas/slots/:id`| **Admin** | Menghapus slot permanen (Decrement counter area). **Ditolak** jika slot sedang terisi/booking. |
@@ -196,7 +198,7 @@ Berikut adalah **10 Skenario Lengkap** logika backend dalam menangani kasus di l
 
 ### 🔟 Skenario Maintenance (Perbaikan)
 *Slot rusak atau sedang dicat ulang.*
-1.  Admin mengubah status slot menjadi "Maintenance" (`PATCH /status`).
+1.  Admin mengubah status slot menjadi "Maintenance" (`PUT /areas/slots/:id` dengan body `appStatus: "maintenance"`).
 2.  **Backend:** Mengupdate `appStatus` menjadi `'maintenance'`.
 3.  **MQTT (Opsional):** Bisa mengirim `setOccupied` atau `buzzerOn` tergantung kebijakan admin, agar lampu merah dan orang tidak parkir.
 4.  **Frontend:** Slot tampil berwarna Abu-abu dan tombol booking disable.
