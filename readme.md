@@ -29,6 +29,7 @@ Menangani proses registrasi, login, dan logout sesi pengguna aplikasi.
 | `POST` | `/gate/generateTicket` | **Admin/Mesin** | **[Printer]** Backend men-generate ID Tiket unik untuk dicetak mesin karcis. |
 | `POST` | `/access/verify` | Public | **[Scan QR]** User memindai tiket fisik.<br>1. Mengikat tiket ke User ID (jika Login).<br>2. Membuat *Guest Session* (jika Tamu).<br>3. Membuka akses fitur reservasi. |
 | `GET` | `/access/activeTicket` | User/Tamu | Mengecek apakah perangkat memiliki sesi tiket yang sedang aktif. |
+| `GET` | `/access/activeTicket?guestSessionId={{guestSessionId}}` | User/Tamu | Mengecek apakah perangkat memiliki sesi tiket yang sedang aktif. |
 
 <br>
 
