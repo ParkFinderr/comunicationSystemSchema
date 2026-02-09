@@ -51,11 +51,14 @@ Menampilkan informasi gedung dan slot.
 
 | Method | Endpoint | Hak Akses | Deskripsi |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/areas` | Public | Menampilkan daftar gedung dan sisa kuota. |
+| `GET` | `/areas` | Public | Menampilkan daftar gedung dan sisa kuota (Real-time Counter). |
+| `POST` | `/areas` | **Admin** | Mendaftarkan gedung/area parkir baru. |
+| `PUT` | `/areas/:id` | **Admin** | Mengubah nama/alamat gedung (Counter Slot tidak boleh diedit manual). |
+| `DELETE`| `/areas/:id` | **Admin** | Menghapus area (Hanya bisa jika area sudah kosong/tanpa slot). |
 | `GET` | `/areas/:id/slots`| Public | **[Snapshot]** Data awal status slot saat aplikasi dibuka. |
-| `POST` | `/areas/slots` | **Admin** | Menambahkan slot baru. |
-| `PUT` | `/areas/slots/:id` | **Admin** | Mengubah detail slot (Nama slot, Lantai, dll). |
-| `PATCH`| `/areas/slots/:id/status`| **Admin** | Mengubah status slot menjadi `'maintenance'` (Rusak). |
+| `POST` | `/areas/slots` | **Admin** | Menambahkan slot baru (Atomic Transaction: Update counter area otomatis). |
+| `PUT` | `/areas/slots/:id` | **Admin** | Mengubah detail slot (Nama, Lantai, Sensor ID) **DAN** Status (Maintenance/Available) sekaligus. |
+| `DELETE`| `/areas/slots/:id`| **Admin** | Menghapus slot permanen (Decrement counter area). **Ditolak** jika slot sedang terisi/booking. |
 
 <br>
 
