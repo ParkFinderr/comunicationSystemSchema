@@ -8,6 +8,18 @@ Dokumen ini menjadi acuan utama bagi Tim Frontend (Mobile & Web) dan Tim IoT Eng
 
 ---
 
+## 🏗️ Arsitektur Sistem
+
+| Komponen | Teknologi | Fungsi Utama |
+| :--- | :--- | :--- |
+| **API Service** | Node.js, Express, Firebase | Menangani User Auth, Booking Logic, CRUD Database, Cron Jobs. |
+| **Realtime Service** | Node.js, Socket.io, Aedes/Mosquitto | Gateway untuk IoT (MQTT) dan update live ke Frontend (WebSocket). |
+| **Database** | Google Firestore | Menyimpan data user, slot, reservasi, dan log transaksi. |
+| **Message Broker** | Redis | Jalur komunikasi internal (Pub/Sub) antar API Service dan Realtime Service. |
+| **IoT Protocol** | MQTT | Jalur komunikasi data sensor dan kontrol aktuator (Lampu/Buzzer). |
+
+---
+
 ## 🔌 1. RESTful API Endpoints
 
 ### 🔐 Tabel Modul Autentikasi
@@ -112,94 +124,118 @@ Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
 
 ---
 
-## 🔄 4. Alur Logika Sistem (System Flows)
+## 🔄 Alur Logika Sistem (System Flows & Scenarios)
 
-Berikut adalah **10 Skenario Lengkap** logika backend dalam menangani kasus di lapangan, disesuaikan dengan protokol kontrol Hardware (LED & LCD).
+Berikut adalah **12 Skenario Logika** yang menangani alur normal hingga kasus anomali (kecurangan/error) di lapangan.
 
-### 1️⃣ Skenario Masuk & Scan Tiket
-1.  User mengambil tiket fisik dari mesin karcis.
-2.  User memindai QR Code tiket menggunakan aplikasi (`POST /access/verify`).
-3.  **Backend:** Mengikat `ticketId` ke akun user. Tiket status menjadi `'claimed'`.
-4.  User mendapat akses ke menu denah parkir.
+### ✅ Skenario Normal
 
-### 2️⃣ Skenario Booking Slot (Normal)
-1.  User memilih slot kosong (Hijau) di aplikasi.
-2.  User tekan "Booking" (`POST /reservations`).
-3.  **Backend:**
-    * Mengubah status slot menjadi `'reserved'` (Kuning).
-    * **MQTT:** Mengirim payload `setReserved` ke alat.
-        * *(Hardware: LED Kuning, LCD "RESERVED", Buzzer Mati)*.
-4.  **WebSocket:** Update peta ke seluruh user lain agar slot tersebut tidak dipilih orang lain.
+#### 1️⃣ Masuk & Scan Tiket
+1.  User mengambil tiket fisik/digital.
+2.  User scan QR Code tiket via App (`POST /access/verify`).
+3.  **Backend:** Validasi tiket. Jika valid, status tiket menjadi `claimed`. User mendapat akses ke menu denah parkir.
 
-### 3️⃣ Skenario Konfirmasi Kedatangan (Check-in)
+#### 2️⃣ Booking Slot
+1.  User memilih slot **Hijau** (Available) -> Tekan "Booking" (`POST /reservations`).
+2.  **Backend API:**
+    * Validasi: Apakah user punya tiket aktif? Apakah slot masih kosong?
+    * Update DB: Slot `reserved`, Reservasi `pending`.
+    * **Redis Pub:** Kirim perintah `reserveSlot`.
+3.  **Realtime Service:** Menerima perintah Redis -> **MQTT Pub:** `setReserved` (Lampu Kuning).
+4.  **WebSocket:** Broadcast ke semua user lain bahwa slot ini sedang dipesan.
+
+#### 3️⃣ Konfirmasi Kedatangan (Check-in)
 1.  User memarkirkan mobil di slot yang dipesan.
-2.  **Sensor IoT:** Mendeteksi objek dan mengirim `1` ke server.
-3.  User menekan tombol "Sudah Sampai" di aplikasi (`PATCH /arrive`).
-4.  **Backend:** Memvalidasi `sensorStatus == 1`.
-5.  Jika valid:
-    * Status slot berubah menjadi `'occupied'` (Merah).
-    * **MQTT:** Mengirim payload `setOccupied` ke alat.
-        * *(Hardware: LED Merah, LCD "OCCUPIED", Buzzer dipastikan Mati)*.
+2.  **Sensor IoT:** Mendeteksi objek -> Kirim `1` ke MQTT.
+3.  User tekan tombol "Saya Sudah Sampai" (`PATCH /arrive`).
+4.  **Backend API:**
+    * **VALIDASI FISIK:** Cek database `sensorStatus`. Jika `0`, **TOLAK** request (mencegah check-in palsu).
+    * Jika `1` (Ada mobil): Update DB Slot `occupied`, Reservasi `active`.
+    * **Redis Pub:** Kirim perintah `occupySlot`.
+5.  **Realtime Service:** **MQTT Pub:** `setOccupied` (Lampu Merah).
 
-### 4️⃣ Skenario Ganti Slot (Swap)
-*User sudah booking Slot A, tapi ingin pindah ke Slot B.*
-1.  User memilih Slot B di aplikasi -> Pilih opsi "Pindah ke sini" (`PUT /swap`).
-2.  **Backend:**
-    * **Slot A (Lama):** Status kembali `'available'`.
-        * **MQTT (Slot A):** Mengirim `setAvailable` *(LED Hijau)*.
-    * **Slot B (Baru):** Status menjadi `'reserved'`.
-        * **MQTT (Slot B):** Mengirim `setReserved` *(LED Kuning)*.
-    * Memperbarui data reservasi user.
+#### 4️⃣ Ganti Slot (Swap)
+*User sudah booking Slot A, ingin pindah ke Slot B.*
+1.  User pilih Slot B -> "Pindah ke sini" (`PUT /swap`).
+2.  **Backend API:**
+    * Slot A (Lama): Reset jadi `available` -> **Redis:** `leaveSlot` (Lampu Hijau).
+    * Slot B (Baru): Set jadi `reserved` -> **Redis:** `reserveSlot` (Lampu Kuning).
+    * Update data reservasi user dengan Slot ID baru.
 
-### 5️⃣ Skenario Pembatalan Manual
-*User berubah pikiran dan tidak jadi parkir.*
-1.  User menekan tombol "Batalkan Pesanan" (`PATCH /cancel`).
-2.  **Backend:**
-    * Mengubah status reservasi menjadi `'cancelled'`.
-    * Mengubah status slot kembali menjadi `'available'`.
-    * **MQTT:** Mengirim payload `setAvailable` ke alat.
-        * *(Hardware: LED Hijau, LCD "AVAILABLE", Buzzer Mati)*.
+#### 5️⃣ Pembatalan Manual (Cancel)
+*User berubah pikiran dan membatalkan pesanan.*
+1.  User tekan "Batalkan Pesanan" (`PATCH /cancel`).
+2.  **Backend API:**
+    * Ubah status reservasi: `cancelled`.
+    * Reset Slot: `available`.
+    * **Redis Pub:** `cancelSlot`.
+3.  **Realtime Service:** **MQTT Pub:** `setAvailable` (Lampu Hijau).
 
-### 6️⃣ Skenario Auto-Cancel (Timeout 30 Menit)
-*User booking tapi tidak kunjung parkir.*
-1.  **Backend Timer:** Menghitung waktu sejak booking dibuat.
-2.  Jika `(Waktu Sekarang - Waktu Booking) > 30 Menit`:
-3.  **Backend Action:**
-    * Otomatis membatalkan reservasi.
-    * **MQTT:** Mengirim payload `setAvailable` ke alat *(Reset Hardware)*.
-    * Mengirim WebSocket `forceRelease` ke aplikasi user.
+#### 6️⃣ Checkout (Keluar Normal)
+1.  User akan keluar -> Tekan "Selesai Parkir" (`PATCH /complete`).
+2.  **Backend API:**
+    * Tutup sesi reservasi (`completed`) & Tiket (`closed`).
+    * Reset Slot `available`.
+    * **Redis Pub:** `leaveSlot`.
+3.  **Realtime Service:** **MQTT Pub:** `setAvailable` (Lampu Hijau).
 
-### 7️⃣ Skenario Checkout (Keluar)
-1.  User menuju pintu keluar -> Tekan "Selesai Parkir" (`PATCH /complete`).
-2.  **Backend:**
-    * Menutup sesi tiket (`'closed'`).
-    * Melepas `activeTicketId` dari profil user.
-    * Mereset slot menjadi `'available'` dan `sensorStatus` dianggap `0`.
-    * **MQTT:** Mengirim payload `setAvailable` ke alat.
-        * *(Hardware: LED Hijau, LCD "AVAILABLE", Buzzer Mati)*.
+---
 
-### 8️⃣ Skenario Anomali: Salah Parkir
-*User A booking Slot 01, tapi User B (orang lain) parkir di Slot 01.*
-1.  **Sensor IoT:** Mendeteksi mobil (`1`) di Slot 01.
-2.  **Backend:** Cek reservasi aktif milik User A, tapi User A belum konfirmasi "Sudah Sampai".
+### ⚠️ Skenario Otomatis (Cron Job & Timer)
+
+#### 7️⃣ Auto-Cancel (Booking Expired)
+*User booking tapi tidak datang dalam 30 menit.*
+1.  **Cron Job:** Cek reservasi `pending` yang `created_at > 30 menit`.
+2.  **Action:**
+    * Ubah status reservasi: `cancelled`.
+    * Reset Slot: `available`.
+    * **Redis Pub:** `cancelSlot` (Lampu Hijau).
+
+#### 8️⃣ Auto-Checkout (Lupa Tekan Tombol)
+*User pergi (Sensor 0) tapi lupa tekan "Selesai Parkir".*
+1.  **Sensor Listener / Cron:** Mendeteksi Slot `occupied` tapi sensor `0` selama > 2 menit.
+2.  **Action:**
+    * Otomatis selesaikan reservasi (`completed`).
+    * Kirim notifikasi ke user: "Sesi parkir Anda diakhiri otomatis."
+    * Reset Slot: `available` (Lampu Hijau).
+
+---
+
+### 🚨 Skenario Anomali & Keamanan
+
+#### 9️⃣ Salah Parkir (Penyusup di Slot Booked)
+*User A booking Slot 01, tapi User B (orang lain) parkir di situ.*
+1.  **Kondisi:** Slot status `booked` (Kuning).
+2.  **Sensor:** Mendeteksi mobil (`1`). User A **BELUM** check-in.
+3.  **Backend Logic:**
+    * Mendeteksi ada mobil masuk saat status `booked` tanpa trigger API `/arrive`.
+4.  **Action:**
+    * **MQTT Pub:** `buzzerOn` (Lampu Merah Kedip + Suara Alarm).
+    * **Admin Alert:** Kirim notifikasi "Penyusup di Slot 01".
+
+#### 🔟 Parkir Liar (Masuk Tanpa Booking)
+*Slot kosong (Available), tiba-tiba ada mobil masuk.*
+1.  **Kondisi:** Slot status `available` (Hijau).
+2.  **Sensor:** Mendeteksi mobil (`1`).
 3.  **Action:**
-    * Menganggap mobil tersebut penyusup.
-    * **MQTT:** Mengirim payload `buzzerOn` ke alat.
-        * *(Hardware: LED Merah Kedip, LCD "ALERT!", Buzzer Nyala)*.
-    * Mengirim notifikasi `alerts` ke Admin Dashboard.
+    * Update DB Slot: `occupied` (agar di map jadi merah/unavailable).
+    * Label di App: **"UNAUTHORIZED"**.
+    * **MQTT Pub:** `buzzerOn` (Alarm Nyala).
 
-### 9️⃣ Skenario Anomali: Parkir Liar
-*Slot 02 kosong (Available), tiba-tiba ada mobil masuk tanpa booking.*
-1.  **Sensor IoT:** Mendeteksi mobil (`1`) di Slot 02.
-2.  **Backend:** Cek status Slot 02 adalah `'available'` (tidak ada yang booking).
-3.  **Action:**
-    * Mengubah tampilan App menjadi `'occupied'` (Merah) dengan label **"UNAUTHORIZED"**.
-    * **MQTT:** Mengirim payload `buzzerOn`.
-        * *(Hardware: LED Merah Kedip, LCD "ALERT!", Buzzer Nyala)*.
+#### 1️⃣1️⃣ Ghost Swap (Celah Keamanan)
+*Mobil A keluar, Mobil B langsung masuk dalam hitungan detik untuk menghindari sistem.*
+1.  **Kondisi:** Slot `occupied` (Mobil A).
+2.  **Event:** Sensor berubah `1` -> `0` (Mobil A keluar) -> `1` (Mobil B masuk) dalam waktu < 1 menit.
+3.  **Backend Logic:**
+    * Mendeteksi perubahan cepat ini sebagai anomali.
+    * Sistem tidak menganggap Mobil B adalah Mobil A.
+4.  **Action:**
+    * **Paksa Selesai:** Sesi Mobil A otomatis di-checkout (`completed`).
+    * **Block Mobil B:** Slot dianggap `occupied` oleh "Hantu/Liar".
+    * **Alarm:** Nyalakan Buzzer untuk mengusir Mobil B.
 
-### 🔟 Skenario Maintenance (Perbaikan)
-*Slot rusak atau sedang dicat ulang.*
-1.  Admin mengubah status slot menjadi "Maintenance" (`PUT /areas/slots/:id` dengan body `appStatus: "maintenance"`).
-2.  **Backend:** Mengupdate `appStatus` menjadi `'maintenance'`.
-3.  **MQTT (Opsional):** Bisa mengirim `setOccupied` atau `buzzerOn` tergantung kebijakan admin, agar lampu merah dan orang tidak parkir.
-4.  **Frontend:** Slot tampil berwarna Abu-abu dan tombol booking disable.
+#### 1️⃣2️⃣ Maintenance
+*Admin mematikan slot untuk perbaikan.*
+1.  Admin set status `maintenance`.
+2.  **MQTT Pub:** `maintenanceSlot` (Lampu Mati/Tanda Khusus).
+3.  User tidak bisa memilih slot ini di aplikasi.
