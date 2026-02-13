@@ -3,7 +3,9 @@
 Dokumentasi ini mencakup spesifikasi **RESTful API**, **WebSocket Events**, dan **MQTT Topics** untuk sistem ParkFinder.
 Dokumen ini menjadi acuan utama bagi Tim Frontend (Mobile & Web) dan Tim IoT Engineer.
 
-> **Base URL:** `BASE URL MENYUSUL`
+> **Base URL API:** `BASE URL MENYUSUL`
+> **WebSocket Events:** `WS URL MENYUSUL`
+> **IoT Protocol:** `MQTT BROKER URL`
 > **Auth Header:** `Authorization: Bearer <jwt_token>`
 
 ---
@@ -22,6 +24,15 @@ Dokumen ini menjadi acuan utama bagi Tim Frontend (Mobile & Web) dan Tim IoT Eng
 
 ## 🔌 1. RESTful API Endpoints
 
+### ⏬ Tabel Modul Download Aplikasi Mobile
+Menangani proses download aplikasi mobile.
+
+| Method | Endpoint | Hak Akses | Deskripsi |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/system/app/download` | Public | Mendowload aplikasi parkfinder. |
+
+<br>
+
 ### 🔐 Tabel Modul Autentikasi
 Menangani proses registrasi, login, dan logout sesi pengguna aplikasi.
 
@@ -33,19 +44,19 @@ Menangani proses registrasi, login, dan logout sesi pengguna aplikasi.
 
 <br>
 
-### 🎫 Tabel Modul Akses & Tiket (Gate System)
-**[CORE LOGIC]** Menangani validasi tiket fisik untuk izin akses "On-Site".
+### 🎫 Tabel Modul Akses & Tiket
+Menangani validasi tiket fisik untuk izin akses "On-Site".
 
 | Method | Endpoint | Hak Akses | Deskripsi |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/gate/generateTicket` | **Admin/Mesin** | **[Printer]** Backend men-generate ID Tiket unik untuk dicetak mesin karcis. |
-| `POST` | `/access/verify` | Public | **[Scan QR]** User memindai tiket fisik.<br>1. Mengikat tiket ke User ID (jika Login).<br>2. Membuat *Guest Session* (jika Tamu).<br>3. Membuka akses fitur reservasi. |
-| `GET` | `/access/activeTicket` | User/Tamu | Mengecek apakah perangkat memiliki sesi tiket yang sedang aktif. |
-| `GET` | `/access/activeTicket?guestSessionId={{guestSessionId}}` | User/Tamu | Mengecek apakah perangkat memiliki sesi tiket yang sedang aktif. |
+| `POST` | `/gate/generateTicket` | **Admin/Mesin** | Backend men-generate ID Tiket unik untuk dicetak mesin karcis. |
+| `POST` | `/access/verify` | Public | Menerima ticketId dari hasil scan, menambahkan tiket ke akun user dan membuat sesi untuk tamu. |
+| `GET` | `/access/activeTicket` | User | Mengecek apakah perangkat memiliki sesi tiket yang sedang aktif. |
+| `GET` | `/access/activeTicket?guestSessionId={{guestSessionId}}` | Tamu | Mengecek apakah perangkat memiliki sesi tiket yang sedang aktif. |
 
 <br>
 
-### 👤 Tabel Modul Manajemen Pengguna
+### 👤 Tabel Modul Manajemen Pengguna dan kendaraan
 Mengelola data profil dan kendaraan.
 
 | Method | Endpoint | Hak Akses | Deskripsi |
@@ -53,9 +64,10 @@ Mengelola data profil dan kendaraan.
 | `GET` | `/users/profile` | User | Mengambil detail data pengguna yang sedang login. |
 | `PUT` | `/users/profile` | User | Mengubah data profil pengguna. |
 | `POST` | `/users/vehicles`| User | Menambahkan data kendaraan baru. |
-| `DELETE`| `/users/vehicles/:id`| User | Menghapus kendaraan. |
-| `GET` | `/admin/users` | **Admin** | Monitoring seluruh pengguna terdaftar. |
-| `DELETE`| `/admin/users/:id` | **Admin** | Ban/Hapus pengguna. |
+| `DELETE`| `/users/vehicles/:id`| User | Menghapus kendaraan menggunakan plat nomor. |
+| `GET` | `/admin/users` | Admin | Monitoring seluruh pengguna terdaftar. |
+| `GET` | `/admin/users/:id` | Admin | Mengambil id user. |
+| `DELETE`| `/admin/users/:id` | Admin | Hapus pengguna. |
 
 <br>
 
@@ -65,38 +77,35 @@ Menampilkan informasi gedung dan slot.
 | Method | Endpoint | Hak Akses | Deskripsi |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/areas` | Public | Menampilkan daftar gedung dan sisa kuota (Real-time Counter). |
+| `POST` | `/areas` | Admin | Mendaftarkan gedung/area parkir baru. |
 | `GET` | `/areas/:id` | Public | Menampilkan detail satu gedung (untuk pre-fill form edit). |
-| `POST` | `/areas` | **Admin** | Mendaftarkan gedung/area parkir baru. |
-| `PUT` | `/areas/:id` | **Admin** | Mengubah nama/alamat gedung (Counter Slot tidak boleh diedit manual). |
-| `DELETE`| `/areas/:id` | **Admin** | Menghapus gedung (Hanya bisa jika gedung sudah kosong/tanpa slot). |
-| `GET` | `/areas/:id/slots`| Public | **[Snapshot]** Data awal status slot di area tertentu saat aplikasi dibuka. |
+| `PUT` | `/areas/:id` | Admin | Mengubah nama/alamat gedung. |
+| `DELETE`| `/areas/:id` | Admin | Menghapus gedung (Hanya bisa jika gedung sudah kosong/tanpa slot). |
+| `GET` | `/areas/:id/slots`| Public |  Data awal status slot di area tertentu saat aplikasi dibuka. |
 | `GET` | `/areas/slots/:id`| Public | Menampilkan detail satu slot (Info fisik & Status). |
-| `POST` | `/areas/slots` | **Admin** | Menambahkan slot baru (Atomic Transaction: Update counter area otomatis). |
-| `PUT` | `/areas/slots/:id` | **Admin** | Mengubah detail slot (Nama, Lantai, Sensor ID) **DAN** Status (Maintenance/Available) sekaligus. |
-| `DELETE`| `/areas/slots/:id`| **Admin** | Menghapus slot permanen (Decrement counter area). **Ditolak** jika slot sedang terisi/booking. |
+| `PUT` | `/areas/slots/:id` | Admin | Mengubah detail slot. |
+| `DELETE`| `/areas/slots/:id`| Admin | Menghapus slot permanen jika slot sedang terisi/booking tidak bisa di hapus. |
+| `POST` | `/areas/slots` | Admin | Menambahkan slot baru. |
 
 <br>
 
-### 📝 Tabel Modul Reservasi & Transaksi
+### 📝 Tabel Modul Reservasi
 Menangani alur booking, swap, cancel, dan konfirmasi IoT.
-**Syarat:** User harus memiliki Tiket Valid (`ticketId`).
+**Syarat:** User/Tamu harus memiliki Tiket Valid.
 
 | Method | Endpoint | Hak Akses | Deskripsi & Trigger |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/reservations` | **Ticket Holder** | **[Booking]** Input: `slotId`, `ticketId`. Validasi tiket sebelum kunci slot. |
-| `GET` | `/reservations/:id` | Public | Melihat detail tiket aktif (Timer, Biaya). |
-| `PUT` | `/reservations/:id/swap` | **Ticket Holder** | **[Ganti Slot]** Pindah slot tanpa membatalkan sesi tiket. |
-| `PATCH`| `/reservations/:id/cancel` | **Ticket Holder** | **[Batal Manual]** User membatalkan pesanan. Slot kembali hijau. |
-| `PATCH`| `/reservations/:id/arrive` | **Ticket Holder** | **[Tombol "Sudah Sampai"]** Validasi Sensor IoT.<br>📡 **IoT:** Kirim `buzzerOff`. |
-| `PATCH`| `/reservations/:id/complete`| **Ticket Holder** | **[Tombol "Keluar"]** Selesai parkir & tutup tiket.<br>📡 **IoT:** Kirim `reset` state. |
-| `GET` | `/users/:userId/reservations`| **User Only** | **[History]** Riwayat parkir User (Tamu tidak akses ini). |
+| `POST` | `/reservations` | User/Tamu Memiliki Tiket | Memesan slot parkir yang tersedia |
+| `GET` | `/reservations/:id` | Public | Melihat detail tiket aktif berdasarkan id. |
+| `PUT` | `/reservations/:reservationId/swap` | User/Tamu Memiliki Tiket | Pindah slot tanpa membatalkan sesi tiket. |
+| `PATCH`| `/reservations/:reservationId/cancel` | User/Tamu Memiliki Tiket | User membatalkan pesanan. |
+| `PATCH`| `/reservations/:reservationId/arrive` | User/Tamu Memiliki Tiket | User menekan tombol telah sampai. |
+| `PATCH`| `/reservations/:reservationId/complete`| User/Tamu Memiliki Tiket | User menekan tombol keluar |
+| `GET` | `/users/:userId/reservations`| User | Riwayat parkir User (Tamu tidak akses ini). |
 
 ---
 
 ## ⚡ 2. WebSocket Events (Real-Time)
-Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
-
-**Connection URL:** `[WS URL MENYUSUL]`
 
 ### 📥 Listen (Server ➔ Client)
 
@@ -110,7 +119,6 @@ Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
 ---
 
 ## 🤖 3. MQTT Specifications (For IoT Team)
-**Broker:** `[MQTT BROKER URL]`
 
 ### 📡 Topics & Payloads
 
@@ -126,7 +134,7 @@ Digunakan oleh Frontend untuk update UI tanpa refresh halaman.
 
 ## 🔄 Alur Logika Sistem (System Flows & Scenarios)
 
-Berikut adalah **12 Skenario Logika** yang menangani alur normal hingga kasus anomali (kecurangan/error) di lapangan.
+**12 Skenario Logika** yang menangani alur normal hingga kasus anomali (kecurangan/error) di lapangan.
 
 ### ✅ Skenario Normal
 
