@@ -128,7 +128,7 @@ Menangani alur booking, swap, cancel, dan konfirmasi IoT.
 | **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `setReserved` | **Aksi Booking:** LED Kuning, LCD "RESERVED". |
 | **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `setAvailable`| **Aksi Cancel/Swap/Keluar:** LED Hijau, LCD "AVAILABLE". |
 | **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `setAccupied` | **Aksi Check-in:** LED Merah, LCD "OCCUPIED". |
-| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `buzzerOn` | **Aksi Anomali:** LED Merah Kedip, LCD "ALERT!", Buzzer ON. |
+| **Server ➔ IoT** | `parkfinder/control/{area}/{slot}`| `actuatorOn` | **Aksi Anomali:** LED Merah Kedip, LCD "ALERT!", Buzzer ON. |
 
 ---
 
@@ -218,7 +218,7 @@ Menangani alur booking, swap, cancel, dan konfirmasi IoT.
 3.  **Backend Logic:**
     * Mendeteksi ada mobil masuk saat status `booked` tanpa trigger API `/arrive`.
 4.  **Action:**
-    * **MQTT Pub:** `buzzerOn` (Lampu Merah Kedip + Suara Alarm).
+    * **MQTT Pub:** `actuatorOn` (Lampu Merah Kedip + Suara Alarm).
     * **Admin Alert:** Kirim notifikasi "Penyusup di Slot 01".
 
 #### 🔟 Parkir Liar (Masuk Tanpa Booking)
@@ -228,7 +228,7 @@ Menangani alur booking, swap, cancel, dan konfirmasi IoT.
 3.  **Action:**
     * Update DB Slot: `occupied` (agar di map jadi merah/unavailable).
     * Label di App: **"UNAUTHORIZED"**.
-    * **MQTT Pub:** `buzzerOn` (Alarm Nyala).
+    * **MQTT Pub:** `actuatorOn` (Alarm Nyala).
 
 #### 1️⃣1️⃣ Ghost Swap (Celah Keamanan)
 *Mobil A keluar, Mobil B langsung masuk dalam hitungan detik untuk menghindari sistem.*
